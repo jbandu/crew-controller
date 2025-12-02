@@ -97,7 +97,7 @@ const ChatPanel = ({ messages, isTyping, onSendMessage, onSelectOption }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      {messages.length > 0 && <SuggestedQuestions onSelect={handleQuestionSelect} />}
+      <SuggestedQuestions onSelect={handleQuestionSelect} />
       <InputBar onSend={onSendMessage} disabled={isTyping} />
     </div>
   );
