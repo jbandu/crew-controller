@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { copaNetwork } from '../../../../data/copaData';
+import { copaNetwork as fallbackCopaNetwork } from '../../../../data/copaData';
+import { fetchCopaNetwork } from '../../../../services/airportService';
 import Badge from '../../shared/Badge';
 
 // Mapbox access token from environment variable
@@ -35,7 +36,7 @@ const mapboxCriticalCSS = `
   }
 `;
 
-const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
+const NetworkMap = ({ highlightRoute, weatherOverlay = false, onAction }) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -45,6 +46,9 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [markersReady, setMarkersReady] = useState(false);
   const [showLoading, setShowLoading] = useState(false);
+  const [selectedDestination, setSelectedDestination] = useState(null);
+  const [copaNetwork, setCopaNetwork] = useState(fallbackCopaNetwork); // Start with fallback data
+  const [isLoadingNetwork, setIsLoadingNetwork] = useState(true);
   const allMarkersRef = useRef(new Map()); // Cache all markers by code
   const hubMarkerRef = useRef(null);
   const loadingTimerRef = useRef(null);
@@ -59,6 +63,25 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       style.textContent = mapboxCriticalCSS;
       document.head.appendChild(style);
     }
+  }, []);
+
+  // Fetch Copa network data from database
+  useEffect(() => {
+    const loadNetworkData = async () => {
+      try {
+        setIsLoadingNetwork(true);
+        const networkData = await fetchCopaNetwork();
+        setCopaNetwork(networkData);
+        console.log(`✅ Loaded ${networkData.destinations.length} airports from database`);
+      } catch (error) {
+        console.warn('⚠️ Failed to load from database, using fallback data:', error.message);
+        // Fallback data is already set as initial state
+      } finally {
+        setIsLoadingNetwork(false);
+      }
+    };
+
+    loadNetworkData();
   }, []);
 
   // Use ResizeObserver to detect when container has dimensions
@@ -184,6 +207,45 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   // Get unique regions
   const regions = ['all', ...new Set(copaNetwork.destinations.map(d => d.region))];
 
+  // Generate mock flight data for a destination
+  const generateFlightData = (dest) => {
+    const flights = [
+      { flight: `CM${Math.floor(Math.random() * 900) + 100}`, departure: '08:30', arrival: '11:45', crew: 'A-12', status: 'On Time' },
+      { flight: `CM${Math.floor(Math.random() * 900) + 100}`, departure: '14:20', arrival: '17:35', crew: 'B-08', status: 'On Time' },
+      { flight: `CM${Math.floor(Math.random() * 900) + 100}`, departure: '19:15', arrival: '22:30', crew: 'C-05', status: 'Delayed 15min' }
+    ];
+
+    return {
+      destination: dest,
+      dailyFlights: flights.length,
+      weeklyFlights: flights.length * 7,
+      flights: flights,
+      crewAssigned: flights.length * 4,
+      nextDeparture: flights[0].departure
+    };
+  };
+
+  // Handle airport click
+  const handleAirportClick = (dest) => {
+    setSelectedDestination(dest);
+
+    // 1. Zoom to destination with smooth animation
+    map.current?.flyTo({
+      center: dest.coords,
+      zoom: 6,
+      duration: 2000,
+      essential: true
+    });
+
+    // 2. Trigger AI response
+    onAction?.('airportSelected', {
+      code: dest.code,
+      city: dest.city,
+      country: dest.country,
+      message: `Tell me about operations to ${dest.city} (${dest.code})`
+    });
+  };
+
   // Initialize ALL markers and routes once on map load (cached permanently)
   useEffect(() => {
     if (!mapLoaded || !map.current || routesInitializedRef.current) return;
@@ -263,6 +325,26 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       destEl.style.borderRadius = '50%';
       destEl.style.border = '2px solid white';
       destEl.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.5)';
+      destEl.style.cursor = 'pointer';
+      destEl.style.transition = 'all 0.2s ease';
+
+      // Add hover effect
+      destEl.addEventListener('mouseenter', () => {
+        destEl.style.transform = 'scale(1.5)';
+        destEl.style.boxShadow = '0 0 15px rgba(59, 130, 246, 0.8)';
+      });
+      destEl.addEventListener('mouseleave', () => {
+        if (selectedDestination?.code !== dest.code) {
+          destEl.style.transform = 'scale(1)';
+          destEl.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.5)';
+        }
+      });
+
+      // Add click handler
+      destEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleAirportClick(dest);
+      });
 
       const marker = new mapboxgl.Marker(destEl)
         .setLngLat(dest.coords)
@@ -295,7 +377,19 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
         marker.addTo(map.current);
         // Update highlight color if needed
         const isHighlighted = highlightRoute && highlightRoute.includes(code);
-        element.style.backgroundColor = isHighlighted ? '#10b981' : '#6b7280';
+        const isSelected = selectedDestination?.code === code;
+
+        if (isSelected) {
+          element.style.backgroundColor = '#3b82f6';
+          element.style.transform = 'scale(1.5)';
+          element.style.boxShadow = '0 0 20px rgba(59, 130, 246, 1)';
+        } else if (isHighlighted) {
+          element.style.backgroundColor = '#10b981';
+        } else {
+          element.style.backgroundColor = '#6b7280';
+          element.style.transform = 'scale(1)';
+          element.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.5)';
+        }
       } else {
         marker.remove();
       }
@@ -306,6 +400,15 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       // Create filter expression
       const codeFilter = ['in', ['get', 'code'], ['literal', Array.from(filteredCodes)]];
       map.current.setFilter('all-routes', codeFilter);
+
+      // Update route highlighting based on selected destination
+      if (selectedDestination) {
+        const routeData = map.current.getSource('all-routes')._data;
+        routeData.features.forEach(feature => {
+          feature.properties.highlighted = feature.properties.code === selectedDestination.code;
+        });
+        map.current.getSource('all-routes').setData(routeData);
+      }
     }
 
     // Add weather overlay if enabled
@@ -340,7 +443,7 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
         }
       });
     }
-  }, [mapLoaded, highlightRoute, weatherOverlay, selectedRegion, searchTerm, filteredDestinations]);
+  }, [mapLoaded, highlightRoute, weatherOverlay, selectedRegion, searchTerm, filteredDestinations, selectedDestination]);
 
   // Show error message if map failed to initialize
   if (error) {
@@ -476,6 +579,99 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
           </div>
         </div>
       </div>
+
+      {/* Flight Details Panel */}
+      {selectedDestination && (() => {
+        const flightData = generateFlightData(selectedDestination);
+        return (
+          <div className="absolute bottom-6 right-6 bg-bg-card border border-white/10 rounded-lg p-4 w-96 max-h-[60vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-white font-semibold text-lg">{selectedDestination.city}</h3>
+                <p className="text-text-muted text-sm">{selectedDestination.code} · {selectedDestination.country}</p>
+              </div>
+              <button
+                onClick={() => setSelectedDestination(null)}
+                className="text-text-muted hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-bg-primary rounded p-3">
+                <p className="text-text-muted text-xs mb-1">Daily Flights</p>
+                <p className="text-white text-xl font-semibold">{flightData.dailyFlights}</p>
+              </div>
+              <div className="bg-bg-primary rounded p-3">
+                <p className="text-text-muted text-xs mb-1">Crew Assigned</p>
+                <p className="text-white text-xl font-semibold">{flightData.crewAssigned}</p>
+              </div>
+              <div className="bg-bg-primary rounded p-3">
+                <p className="text-text-muted text-xs mb-1">Weekly Flights</p>
+                <p className="text-white text-xl font-semibold">{flightData.weeklyFlights}</p>
+              </div>
+              <div className="bg-bg-primary rounded p-3">
+                <p className="text-text-muted text-xs mb-1">Next Departure</p>
+                <p className="text-white text-xl font-semibold">{flightData.nextDeparture}</p>
+              </div>
+            </div>
+
+            {/* Flight Schedule */}
+            <div>
+              <h4 className="text-white font-semibold mb-3 text-sm">Today's Schedule</h4>
+              <div className="space-y-2">
+                {flightData.flights.map((flight, idx) => (
+                  <div key={idx} className="bg-bg-primary rounded p-3 border border-white/5">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-accent-blue font-semibold">{flight.flight}</span>
+                      <Badge
+                        variant={flight.status === 'On Time' ? 'success' : 'warning'}
+                        size="sm"
+                      >
+                        {flight.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <p className="text-text-muted">Departure</p>
+                        <p className="text-white font-medium">{flight.departure}</p>
+                      </div>
+                      <div>
+                        <p className="text-text-muted">Arrival</p>
+                        <p className="text-white font-medium">{flight.arrival}</p>
+                      </div>
+                      <div>
+                        <p className="text-text-muted">Crew</p>
+                        <p className="text-white font-medium">{flight.crew}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <button
+                onClick={() => {
+                  map.current?.flyTo({
+                    center: copaNetwork.hub.coords,
+                    zoom: 3.5,
+                    duration: 2000
+                  });
+                  setSelectedDestination(null);
+                }}
+                className="w-full px-4 py-2 bg-accent-blue hover:bg-accent-blue/80 text-white rounded text-sm font-medium transition-colors"
+              >
+                Back to Network View
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

@@ -22,7 +22,7 @@ const VisualizationRouter = ({ type, data, onAction }) => {
     case 'LiveWeatherExposure':
       return <LiveWeatherExposure />;
     case 'NetworkMap':
-      return <NetworkMap highlightRoute={data?.highlightRoute} weatherOverlay={data?.weatherOverlay} />;
+      return <NetworkMap highlightRoute={data?.highlightRoute} weatherOverlay={data?.weatherOverlay} onAction={onAction} />;
     case 'GanttTimeline':
       return <GanttTimeline highlightCrew={data?.highlightCrew} nowTime={data?.nowTime} />;
     case 'ResolutionPreview':
