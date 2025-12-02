@@ -41,6 +41,10 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [containerReady, setContainerReady] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [markersReady, setMarkersReady] = useState(false);
+  const markersRef = useRef([]);
 
   // Inject critical CSS on mount
   useEffect(() => {
@@ -163,77 +167,140 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
     };
   }, [containerReady]);
 
+  // Filter destinations based on region and search
+  const filteredDestinations = copaNetwork.destinations.filter(dest => {
+    const matchesRegion = selectedRegion === 'all' || dest.region === selectedRegion;
+    const matchesSearch = searchTerm === '' ||
+      dest.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      dest.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      dest.country.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesRegion && matchesSearch;
+  });
+
+  // Get unique regions
+  const regions = ['all', ...new Set(copaNetwork.destinations.map(d => d.region))];
+
   useEffect(() => {
     if (!mapLoaded || !map.current) return;
 
-    // Add hub marker
-    const hubEl = document.createElement('div');
-    hubEl.className = 'hub-marker';
-    hubEl.style.backgroundColor = '#3b82f6';
-    hubEl.style.width = '24px';
-    hubEl.style.height = '24px';
-    hubEl.style.borderRadius = '50%';
-    hubEl.style.border = '3px solid white';
-    hubEl.style.boxShadow = '0 0 20px rgba(59, 130, 246, 0.8)';
+    setMarkersReady(false);
 
-    new mapboxgl.Marker(hubEl)
-      .setLngLat(copaNetwork.hub.coords)
-      .setPopup(
-        new mapboxgl.Popup({ offset: 25 })
-          .setHTML(`<strong>${copaNetwork.hub.name}</strong><br/>${copaNetwork.hub.city}`)
-      )
-      .addTo(map.current);
+    // Clear existing markers
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
 
-    // Add destination markers and routes
-    copaNetwork.destinations.forEach((dest) => {
-      // Add destination marker
-      const destEl = document.createElement('div');
-      destEl.className = 'dest-marker';
-      destEl.style.backgroundColor = highlightRoute && highlightRoute.includes(dest.code) ? '#10b981' : '#6b7280';
-      destEl.style.width = '12px';
-      destEl.style.height = '12px';
-      destEl.style.borderRadius = '50%';
-      destEl.style.border = '2px solid white';
-      destEl.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.5)';
+    // Remove existing route layers and sources
+    if (map.current.getLayer('all-routes')) {
+      map.current.removeLayer('all-routes');
+    }
+    if (map.current.getSource('all-routes')) {
+      map.current.removeSource('all-routes');
+    }
 
-      new mapboxgl.Marker(destEl)
-        .setLngLat(dest.coords)
+    // Add hub marker (only once)
+    if (!document.querySelector('.hub-marker')) {
+      const hubEl = document.createElement('div');
+      hubEl.className = 'hub-marker';
+      hubEl.style.backgroundColor = '#3b82f6';
+      hubEl.style.width = '24px';
+      hubEl.style.height = '24px';
+      hubEl.style.borderRadius = '50%';
+      hubEl.style.border = '3px solid white';
+      hubEl.style.boxShadow = '0 0 20px rgba(59, 130, 246, 0.8)';
+
+      const hubMarker = new mapboxgl.Marker(hubEl)
+        .setLngLat(copaNetwork.hub.coords)
         .setPopup(
-          new mapboxgl.Popup({ offset: 15 })
-            .setHTML(`<strong>${dest.city}</strong><br/>${dest.code}`)
+          new mapboxgl.Popup({ offset: 25 })
+            .setHTML(`<strong>${copaNetwork.hub.name}</strong><br/>${copaNetwork.hub.city}`)
         )
         .addTo(map.current);
 
-      // Add route line
-      const routeId = `route-${dest.code}`;
+      markersRef.current.push(hubMarker);
+    }
 
-      if (map.current.getSource(routeId)) {
-        map.current.removeLayer(routeId);
-        map.current.removeSource(routeId);
+    // Create all routes as a single GeoJSON FeatureCollection (MUCH faster!)
+    const routeFeatures = filteredDestinations.map((dest) => ({
+      type: 'Feature',
+      properties: {
+        code: dest.code,
+        highlighted: highlightRoute && highlightRoute.includes(dest.code)
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: [copaNetwork.hub.coords, dest.coords]
+      }
+    }));
+
+    // Add single source with all routes
+    map.current.addSource('all-routes', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: routeFeatures
+      }
+    });
+
+    // Add single layer for all routes with data-driven styling
+    map.current.addLayer({
+      id: 'all-routes',
+      type: 'line',
+      source: 'all-routes',
+      paint: {
+        'line-color': [
+          'case',
+          ['get', 'highlighted'],
+          '#10b981',
+          '#3b82f6'
+        ],
+        'line-width': [
+          'case',
+          ['get', 'highlighted'],
+          3,
+          1.5
+        ],
+        'line-opacity': 0.6
+      }
+    });
+
+    // Add destination markers in batches to avoid blocking
+    const addMarkersBatch = (startIdx) => {
+      const batchSize = 10;
+      const endIdx = Math.min(startIdx + batchSize, filteredDestinations.length);
+
+      for (let i = startIdx; i < endIdx; i++) {
+        const dest = filteredDestinations[i];
+
+        const destEl = document.createElement('div');
+        destEl.className = 'dest-marker';
+        destEl.style.backgroundColor = highlightRoute && highlightRoute.includes(dest.code) ? '#10b981' : '#6b7280';
+        destEl.style.width = '12px';
+        destEl.style.height = '12px';
+        destEl.style.borderRadius = '50%';
+        destEl.style.border = '2px solid white';
+        destEl.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.5)';
+
+        const marker = new mapboxgl.Marker(destEl)
+          .setLngLat(dest.coords)
+          .setPopup(
+            new mapboxgl.Popup({ offset: 15 })
+              .setHTML(`<strong>${dest.city}</strong><br/>${dest.code} - ${dest.country}`)
+          )
+          .addTo(map.current);
+
+        markersRef.current.push(marker);
       }
 
-      map.current.addSource(routeId, {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: [copaNetwork.hub.coords, dest.coords]
-          }
-        }
-      });
+      if (endIdx < filteredDestinations.length) {
+        // Schedule next batch
+        requestAnimationFrame(() => addMarkersBatch(endIdx));
+      } else {
+        setMarkersReady(true);
+      }
+    };
 
-      map.current.addLayer({
-        id: routeId,
-        type: 'line',
-        source: routeId,
-        paint: {
-          'line-color': highlightRoute && highlightRoute.includes(dest.code) ? '#10b981' : '#3b82f6',
-          'line-width': highlightRoute && highlightRoute.includes(dest.code) ? 3 : 1.5,
-          'line-opacity': 0.6
-        }
-      });
-    });
+    // Start adding markers
+    addMarkersBatch(0);
 
     // Add weather overlay if enabled
     if (weatherOverlay) {
@@ -271,7 +338,7 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
         });
       }
     }
-  }, [mapLoaded, highlightRoute, weatherOverlay]);
+  }, [mapLoaded, highlightRoute, weatherOverlay, selectedRegion, searchTerm, filteredDestinations]);
 
   // Show error message if map failed to initialize
   if (error) {
@@ -302,6 +369,68 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="absolute inset-0" />
+
+      {/* Loading Indicator */}
+      {mapLoaded && !markersReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-primary/50 backdrop-blur-sm pointer-events-none">
+          <div className="bg-bg-card border border-white/10 rounded-lg p-4 flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-accent-blue border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-white text-sm">Loading {filteredDestinations.length} destinations...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Filter Controls */}
+      <div className="absolute top-6 right-6 bg-bg-card border border-white/10 rounded-lg p-4 space-y-3 min-w-[280px]">
+        <h3 className="text-white font-semibold mb-2">Filter Routes</h3>
+
+        {/* Search Box */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search city, code, or country..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-3 py-2 bg-bg-primary border border-white/10 rounded text-white text-sm placeholder-text-muted focus:outline-none focus:border-accent-blue"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-white"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Region Filter */}
+        <div>
+          <label className="text-text-muted text-xs mb-2 block">Region</label>
+          <div className="flex flex-wrap gap-2">
+            {regions.map(region => (
+              <button
+                key={region}
+                onClick={() => setSelectedRegion(region)}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  selectedRegion === region
+                    ? 'bg-accent-blue text-white'
+                    : 'bg-bg-primary text-text-secondary hover:bg-bg-primary/80'
+                }`}
+              >
+                {region === 'all' ? 'All' : region}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Results Count */}
+        <div className="pt-2 border-t border-white/10">
+          <span className="text-text-muted text-xs">
+            Showing <span className="text-white font-semibold">{filteredDestinations.length}</span> of{' '}
+            <span className="text-white font-semibold">{copaNetwork.destinations.length}</span> destinations
+          </span>
+        </div>
+      </div>
 
       {/* Map Legend */}
       <div className="absolute bottom-6 left-6 bg-bg-card border border-white/10 rounded-lg p-4 space-y-2">
@@ -334,8 +463,8 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
             <span className="text-white font-semibold">{copaNetwork.destinations.length}</span>
           </div>
           <div className="flex justify-between gap-8">
-            <span className="text-text-muted text-sm">Active Routes:</span>
-            <span className="text-white font-semibold">{copaNetwork.destinations.length}</span>
+            <span className="text-text-muted text-sm">Visible Routes:</span>
+            <span className="text-white font-semibold">{filteredDestinations.length}</span>
           </div>
           <div className="flex justify-between gap-8">
             <span className="text-text-muted text-sm">Hub Status:</span>
