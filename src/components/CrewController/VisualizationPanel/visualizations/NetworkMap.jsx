@@ -7,10 +7,8 @@ import Badge from '../../shared/Badge';
 // Mapbox access token from environment variable
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
-// Debug logging
-console.log('[NetworkMap] Module loaded, token exists:', !!mapboxgl.accessToken);
-
-// Critical Mapbox CSS that must be applied (in case the CSS import fails)
+// Critical Mapbox CSS - injected to ensure map displays correctly in production
+// This is needed because the mapbox-gl.css import may not load properly in some build configurations
 const mapboxCriticalCSS = `
   .mapboxgl-map {
     position: absolute !important;
@@ -42,9 +40,7 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   const map = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [error, setError] = useState(null);
-  const [debugInfo, setDebugInfo] = useState({});
   const [containerReady, setContainerReady] = useState(false);
-  const initAttempts = useRef(0);
 
   // Inject critical CSS on mount
   useEffect(() => {
@@ -54,32 +50,8 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       style.id = styleId;
       style.textContent = mapboxCriticalCSS;
       document.head.appendChild(style);
-      console.log('[NetworkMap] Injected critical CSS');
     }
   }, []);
-
-  // Update debug info with canvas details
-  useEffect(() => {
-    if (!mapLoaded || !mapContainer.current) return;
-
-    const updateCanvasInfo = () => {
-      const canvas = mapContainer.current.querySelector('canvas');
-      const mapDiv = mapContainer.current.querySelector('.mapboxgl-map');
-      setDebugInfo(prev => ({
-        ...prev,
-        canvasExists: !!canvas,
-        canvasWidth: canvas?.width || 0,
-        canvasHeight: canvas?.height || 0,
-        canvasDisplay: canvas ? getComputedStyle(canvas).display : 'N/A',
-        mapDivExists: !!mapDiv,
-        mapDivDisplay: mapDiv ? getComputedStyle(mapDiv).display : 'N/A'
-      }));
-    };
-
-    // Update after a short delay to let Mapbox finish rendering
-    const timeoutId = setTimeout(updateCanvasInfo, 500);
-    return () => clearTimeout(timeoutId);
-  }, [mapLoaded]);
 
   // Use ResizeObserver to detect when container has dimensions
   useEffect(() => {
@@ -88,7 +60,6 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
     const checkDimensions = () => {
       const rect = mapContainer.current?.getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) {
-        console.log('[NetworkMap] Container ready with dimensions:', rect.width, 'x', rect.height);
         setContainerReady(true);
         return true;
       }
@@ -102,7 +73,6 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          console.log('[NetworkMap] ResizeObserver detected dimensions:', entry.contentRect.width, 'x', entry.contentRect.height);
           setContainerReady(true);
           observer.disconnect();
         }
@@ -114,7 +84,6 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
     // Also set up a fallback timeout check
     const timeoutId = setTimeout(() => {
       if (!containerReady) {
-        console.log('[NetworkMap] Timeout check for dimensions');
         checkDimensions();
       }
     }, 500);
@@ -127,62 +96,31 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
 
   // Initialize map when container is ready
   useEffect(() => {
-    console.log('[NetworkMap] Init useEffect - containerReady:', containerReady, 'map exists:', !!map.current);
-
     if (!containerReady) return;
-    if (map.current) {
-      console.log('[NetworkMap] Map already initialized, skipping');
-      return;
-    }
-    if (!mapContainer.current) {
-      console.log('[NetworkMap] No container ref, skipping');
-      return;
-    }
+    if (map.current) return;
+    if (!mapContainer.current) return;
 
-    initAttempts.current += 1;
-    console.log('[NetworkMap] Initialization attempt #', initAttempts.current);
-
-    // Get container dimensions for debugging
     const rect = mapContainer.current.getBoundingClientRect();
-    const containerDebug = {
-      width: Math.round(rect.width),
-      height: Math.round(rect.height),
-      top: Math.round(rect.top),
-      left: Math.round(rect.left),
-      tokenExists: !!mapboxgl.accessToken,
-      tokenLength: mapboxgl.accessToken ? mapboxgl.accessToken.length : 0,
-      webglSupported: mapboxgl.supported(),
-      attempt: initAttempts.current
-    };
-    console.log('[NetworkMap] Container dimensions:', containerDebug);
-    setDebugInfo(containerDebug);
 
     // Check if WebGL is supported
     if (!mapboxgl.supported()) {
-      const errMsg = 'WebGL is not supported in your browser. Please enable hardware acceleration or use a modern browser.';
-      console.error('[NetworkMap]', errMsg);
-      setError(errMsg);
+      setError('WebGL is not supported in your browser. Please enable hardware acceleration or use a modern browser.');
       return;
     }
 
     // Check if Mapbox token is available
     if (!mapboxgl.accessToken) {
-      const errMsg = 'Mapbox access token is not configured. Please check your environment variables.';
-      console.error('[NetworkMap]', errMsg);
-      setError(errMsg);
+      setError('Mapbox access token is not configured. Please check your environment variables.');
       return;
     }
 
     // Check if container has dimensions
     if (rect.width === 0 || rect.height === 0) {
-      const errMsg = `Map container has no dimensions (${rect.width}x${rect.height}). CSS height chain may be broken.`;
-      console.error('[NetworkMap]', errMsg);
-      setError(errMsg);
+      setError('Map container has no dimensions. Please refresh the page.');
       return;
     }
 
     try {
-      console.log('[NetworkMap] Initializing Mapbox GL map...');
       // Initialize map
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
@@ -191,19 +129,17 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
         zoom: 3.5,
         projection: 'globe'
       });
-      console.log('[NetworkMap] Map object created successfully');
     } catch (err) {
-      console.error('[NetworkMap] Failed to initialize Mapbox GL:', err);
-      setError(`Failed to initialize the map: ${err.message}`);
+      console.error('Failed to initialize Mapbox GL:', err);
+      setError('Failed to initialize the map. Please try refreshing the page.');
       return;
     }
 
     map.current.on('error', (e) => {
-      console.error('[NetworkMap] Map error event:', e);
+      console.error('Mapbox error:', e);
     });
 
     map.current.on('style.load', () => {
-      console.log('[NetworkMap] Style loaded successfully');
       // Add fog and atmosphere
       map.current.setFog({
         color: 'rgb(10, 15, 26)',
@@ -216,15 +152,10 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       setMapLoaded(true);
     });
 
-    map.current.on('load', () => {
-      console.log('[NetworkMap] Map fully loaded');
-    });
-
     // Add navigation controls
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
     return () => {
-      console.log('[NetworkMap] Cleanup - removing map');
       if (map.current) {
         map.current.remove();
         map.current = null;
@@ -352,15 +283,6 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
             <div>
               <h3 className="text-white font-semibold mb-2">Map Unavailable</h3>
               <p className="text-text-secondary text-sm mb-4">{error}</p>
-              {/* Debug info panel */}
-              <div className="bg-bg-elevated rounded p-3 mb-4 text-xs font-mono">
-                <div className="text-text-muted mb-1">Debug Info:</div>
-                <div className="text-text-secondary">
-                  Container: {debugInfo.width}x{debugInfo.height}<br />
-                  Token: {debugInfo.tokenExists ? `Yes (${debugInfo.tokenLength} chars)` : 'No'}<br />
-                  WebGL: {debugInfo.webglSupported ? 'Supported' : 'Not Supported'}
-                </div>
-              </div>
               <div className="text-text-muted text-xs">
                 <p className="mb-2">Possible solutions:</p>
                 <ul className="list-disc ml-4 space-y-1">
@@ -380,25 +302,6 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="absolute inset-0" />
-
-      {/* DEBUG PANEL - Remove after fixing */}
-      <div className="absolute top-6 right-6 bg-yellow-900/90 border border-yellow-500 rounded-lg p-3 text-xs font-mono z-50 max-w-xs">
-        <div className="text-yellow-300 font-bold mb-2">DEBUG INFO</div>
-        <div className="text-yellow-100 space-y-1">
-          <div>Container: {debugInfo.width || '?'}x{debugInfo.height || '?'}</div>
-          <div>Token: {debugInfo.tokenExists ? `Yes (${debugInfo.tokenLength} chars)` : 'NO TOKEN!'}</div>
-          <div>WebGL: {debugInfo.webglSupported === undefined ? '?' : debugInfo.webglSupported ? 'Yes' : 'No'}</div>
-          <div>Container Ready: {containerReady ? 'Yes' : 'No'}</div>
-          <div>Map Loaded: {mapLoaded ? 'Yes' : 'No'}</div>
-          <div>Init Attempts: {initAttempts.current}</div>
-          <div className="border-t border-yellow-600 pt-1 mt-1">Canvas Info:</div>
-          <div>Canvas: {debugInfo.canvasExists ? `Yes (${debugInfo.canvasWidth}x${debugInfo.canvasHeight})` : 'No'}</div>
-          <div>Canvas Display: {debugInfo.canvasDisplay || '?'}</div>
-          <div>MapDiv: {debugInfo.mapDivExists ? 'Yes' : 'No'}</div>
-          <div>MapDiv Display: {debugInfo.mapDivDisplay || '?'}</div>
-          {error && <div className="text-red-400">Error: {error}</div>}
-        </div>
-      </div>
 
       {/* Map Legend */}
       <div className="absolute bottom-6 left-6 bg-bg-card border border-white/10 rounded-lg p-4 space-y-2">
