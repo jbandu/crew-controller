@@ -7,6 +7,13 @@ export const suggestedQuestions = [
     viz: 'WeatherExposure'
   },
   {
+    id: 'liveweather',
+    icon: '🌍',
+    short: 'Live weather',
+    full: 'Show me real-time weather across Copa network',
+    viz: 'LiveWeatherExposure'
+  },
+  {
     id: 'fatigue',
     icon: '⏱️',
     short: 'Fatigue risk',

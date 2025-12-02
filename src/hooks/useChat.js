@@ -5,7 +5,18 @@ import { sounds } from '../utils/sounds';
 const getResponseForInput = (content, demoStep) => {
   const lowerContent = content.toLowerCase();
 
-  // Handle weather question
+  // Handle live weather question
+  if (lowerContent.includes('real-time weather') || lowerContent.includes('live weather')) {
+    return {
+      type: 'ai-analysis',
+      content: `Fetching live weather data from OpenWeather API across Copa Airlines network...
+
+This includes real-time conditions for PTY hub and all destinations, with operational impact analysis and recommendations.`,
+      visualization: 'LiveWeatherExposure'
+    };
+  }
+
+  // Handle weather exposure question
   if (lowerContent.includes('weather') || lowerContent.includes('exposure')) {
     return demoMessages.weatherResponse;
   }

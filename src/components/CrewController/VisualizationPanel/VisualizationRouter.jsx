@@ -1,5 +1,6 @@
 import OperationsOverview from './visualizations/OperationsOverview';
 import WeatherExposure from './visualizations/WeatherExposure';
+import LiveWeatherExposure from './visualizations/LiveWeatherExposure';
 import GanttTimeline from './visualizations/GanttTimeline';
 import ResolutionPreview from './visualizations/ResolutionPreview';
 import ShiftReport from './visualizations/ShiftReport';
@@ -11,6 +12,8 @@ const VisualizationRouter = ({ type, data }) => {
       return <OperationsOverview />;
     case 'WeatherExposure':
       return <WeatherExposure />;
+    case 'LiveWeatherExposure':
+      return <LiveWeatherExposure />;
     case 'NetworkMap':
       return <NetworkMap highlightRoute={data?.highlightRoute} weatherOverlay={data?.weatherOverlay} />;
     case 'GanttTimeline':
