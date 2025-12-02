@@ -8,6 +8,7 @@ import {
   getRandomDisruption
 } from '../data/rotatingScenarios';
 import { getAIAnalysis } from '../services/anthropicService';
+import { getMockResponse } from '../data/mockResponses';
 
 const getResponseForInput = (content, demoStep) => {
   const lowerContent = content.toLowerCase();
@@ -106,12 +107,16 @@ export const useChat = () => {
         };
       } catch (error) {
         console.error('Anthropic API error:', error);
-        // Fall back to demo response
+        // Fall back to enhanced mock response
         await new Promise(resolve => setTimeout(resolve, 1000));
-        response = getResponseForInput(content, demoStep);
+        response = getMockResponse(content);
       }
+    } else if (!hasPreScriptedResponse) {
+      // No API key - use enhanced mock responses
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+      response = getMockResponse(content);
     } else {
-      // Use pre-scripted demo response
+      // Use pre-scripted demo response for suggested questions
       await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
       response = getResponseForInput(content, demoStep);
     }
