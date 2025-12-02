@@ -319,6 +319,20 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="absolute inset-0" />
 
+      {/* DEBUG PANEL - Remove after fixing */}
+      <div className="absolute top-6 right-6 bg-yellow-900/90 border border-yellow-500 rounded-lg p-3 text-xs font-mono z-50 max-w-xs">
+        <div className="text-yellow-300 font-bold mb-2">DEBUG INFO</div>
+        <div className="text-yellow-100 space-y-1">
+          <div>Container: {debugInfo.width || '?'}x{debugInfo.height || '?'}</div>
+          <div>Token: {debugInfo.tokenExists ? `Yes (${debugInfo.tokenLength} chars)` : 'NO TOKEN!'}</div>
+          <div>WebGL: {debugInfo.webglSupported === undefined ? '?' : debugInfo.webglSupported ? 'Yes' : 'No'}</div>
+          <div>Container Ready: {containerReady ? 'Yes' : 'No'}</div>
+          <div>Map Loaded: {mapLoaded ? 'Yes' : 'No'}</div>
+          <div>Init Attempts: {initAttempts.current}</div>
+          {error && <div className="text-red-400">Error: {error}</div>}
+        </div>
+      </div>
+
       {/* Map Legend */}
       <div className="absolute bottom-6 left-6 bg-bg-card border border-white/10 rounded-lg p-4 space-y-2">
         <div className="flex items-center gap-2">
