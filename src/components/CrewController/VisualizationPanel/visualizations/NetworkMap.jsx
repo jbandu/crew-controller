@@ -49,6 +49,7 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false, onAction }) => {
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [copaNetwork, setCopaNetwork] = useState(fallbackCopaNetwork); // Start with fallback data
   const [isLoadingNetwork, setIsLoadingNetwork] = useState(true);
+  const [weatherLayer, setWeatherLayer] = useState(null); // null, 'clouds', 'precipitation', 'temp', 'wind'
   const allMarkersRef = useRef(new Map()); // Cache all markers by code
   const hubMarkerRef = useRef(null);
   const loadingTimerRef = useRef(null);
@@ -411,39 +412,47 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false, onAction }) => {
       }
     }
 
-    // Add weather overlay if enabled
-    if (weatherOverlay && !map.current.getSource('weather-overlay')) {
-      map.current.addSource('weather-overlay', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: [{
-            type: 'Feature',
-            geometry: {
-              type: 'Point',
-              coordinates: copaNetwork.hub.coords
-            },
-            properties: {
-              title: 'Thunderstorm Warning',
-              description: '14:00-18:00'
-            }
-          }]
-        }
+  }, [mapLoaded, highlightRoute, weatherOverlay, selectedRegion, searchTerm, filteredDestinations, selectedDestination]);
+
+  // Manage weather tile layers based on weatherLayer state
+  useEffect(() => {
+    if (!mapLoaded || !map.current) return;
+
+    const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY;
+
+    // Remove existing weather layer if it exists
+    if (map.current.getLayer('weather-layer')) {
+      map.current.removeLayer('weather-layer');
+    }
+    if (map.current.getSource('weather-tiles')) {
+      map.current.removeSource('weather-tiles');
+    }
+
+    // Add new weather layer if one is selected
+    if (weatherLayer && OPENWEATHER_API_KEY) {
+      const layerUrls = {
+        clouds: `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`,
+        precipitation: `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`,
+        temp: `https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`,
+        wind: `https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`
+      };
+
+      map.current.addSource('weather-tiles', {
+        type: 'raster',
+        tiles: [layerUrls[weatherLayer]],
+        tileSize: 256
       });
 
       map.current.addLayer({
-        id: 'weather-warning',
-        type: 'circle',
-        source: 'weather-overlay',
+        id: 'weather-layer',
+        type: 'raster',
+        source: 'weather-tiles',
         paint: {
-          'circle-radius': 60,
-          'circle-color': '#ef4444',
-          'circle-opacity': 0.3,
-          'circle-blur': 0.8
+          'raster-opacity': 0.6
         }
       });
     }
-  }, [mapLoaded, highlightRoute, weatherOverlay, selectedRegion, searchTerm, filteredDestinations, selectedDestination]);
+  }, [mapLoaded, weatherLayer]);
 
   // Show error message if map failed to initialize
   if (error) {
@@ -485,8 +494,66 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false, onAction }) => {
         </div>
       )}
 
-      {/* Filter Controls */}
+      {/* Weather Controls */}
       <div className="absolute top-6 right-6 bg-bg-card border border-white/10 rounded-lg p-4 space-y-3 min-w-[280px]">
+        <h3 className="text-white font-semibold mb-2">Weather Overlay</h3>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setWeatherLayer(null)}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              weatherLayer === null
+                ? 'bg-accent-blue text-white'
+                : 'bg-bg-primary text-text-secondary hover:bg-bg-primary/80'
+            }`}
+          >
+            Off
+          </button>
+          <button
+            onClick={() => setWeatherLayer('clouds')}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              weatherLayer === 'clouds'
+                ? 'bg-accent-blue text-white'
+                : 'bg-bg-primary text-text-secondary hover:bg-bg-primary/80'
+            }`}
+          >
+            ☁️ Clouds
+          </button>
+          <button
+            onClick={() => setWeatherLayer('precipitation')}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              weatherLayer === 'precipitation'
+                ? 'bg-accent-blue text-white'
+                : 'bg-bg-primary text-text-secondary hover:bg-bg-primary/80'
+            }`}
+          >
+            🌧️ Precipitation
+          </button>
+          <button
+            onClick={() => setWeatherLayer('temp')}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              weatherLayer === 'temp'
+                ? 'bg-accent-blue text-white'
+                : 'bg-bg-primary text-text-secondary hover:bg-bg-primary/80'
+            }`}
+          >
+            🌡️ Temperature
+          </button>
+          <button
+            onClick={() => setWeatherLayer('wind')}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              weatherLayer === 'wind'
+                ? 'bg-accent-blue text-white'
+                : 'bg-bg-primary text-text-secondary hover:bg-bg-primary/80'
+            }`}
+          >
+            💨 Wind
+          </button>
+        </div>
+      </div>
+
+      {/* Filter Controls */}
+      <div className="absolute top-[180px] right-6 bg-bg-card border border-white/10 rounded-lg p-4 space-y-3 min-w-[280px]">
         <h3 className="text-white font-semibold mb-2">Filter Routes</h3>
 
         {/* Search Box */}
@@ -551,11 +618,34 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false, onAction }) => {
           <div className="w-8 h-0.5 bg-accent-blue"></div>
           <span className="text-sm text-text-secondary">Active Routes</span>
         </div>
-        {weatherOverlay && (
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-red-500 opacity-50"></div>
-            <span className="text-sm text-text-secondary">Weather Alert</span>
-          </div>
+        {weatherLayer && (
+          <>
+            <div className="pt-2 border-t border-white/10 mt-2"></div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-text-secondary font-semibold">
+                Weather: {weatherLayer === 'clouds' && '☁️ Clouds'}
+                {weatherLayer === 'precipitation' && '🌧️ Precipitation'}
+                {weatherLayer === 'temp' && '🌡️ Temperature'}
+                {weatherLayer === 'wind' && '💨 Wind Speed'}
+              </span>
+            </div>
+            {weatherLayer === 'temp' && (
+              <div className="text-xs text-text-muted">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-2" style={{ background: 'linear-gradient(to right, #0000ff, #00ff00, #ffff00, #ff0000)' }}></div>
+                  <span>Cold → Hot</span>
+                </div>
+              </div>
+            )}
+            {weatherLayer === 'precipitation' && (
+              <div className="text-xs text-text-muted">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-2" style={{ background: 'linear-gradient(to right, #00ff00, #ffff00, #ff0000)' }}></div>
+                  <span>Light → Heavy</span>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
