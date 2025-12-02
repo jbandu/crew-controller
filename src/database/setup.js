@@ -14,6 +14,7 @@
  *   - DATABASE_URL environment variable set
  */
 
+import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';

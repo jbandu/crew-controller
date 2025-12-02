@@ -21,6 +21,12 @@ const CrewController = () => {
 
   const { current, data, isAnimating, setVisualization } = useVisualization();
 
+  // Clear both messages and reset visualization to default
+  const handleClear = () => {
+    clearMessages();
+    setVisualization('OperationsOverview', null);
+  };
+
   // Update visualization when messages change
   useEffect(() => {
     if (messages.length > 0) {
@@ -43,7 +49,7 @@ const CrewController = () => {
             isTyping={isTyping}
             onSendMessage={sendMessage}
             onSelectOption={selectOption}
-            onClear={clearMessages}
+            onClear={handleClear}
           />
         </div>
 
