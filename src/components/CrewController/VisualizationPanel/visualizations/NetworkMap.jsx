@@ -44,7 +44,11 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [markersReady, setMarkersReady] = useState(false);
-  const markersRef = useRef([]);
+  const [showLoading, setShowLoading] = useState(false);
+  const allMarkersRef = useRef(new Map()); // Cache all markers by code
+  const hubMarkerRef = useRef(null);
+  const loadingTimerRef = useRef(null);
+  const routesInitializedRef = useRef(false);
 
   // Inject critical CSS on mount
   useEffect(() => {
@@ -180,25 +184,14 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   // Get unique regions
   const regions = ['all', ...new Set(copaNetwork.destinations.map(d => d.region))];
 
+  // Initialize ALL markers and routes once on map load (cached permanently)
   useEffect(() => {
-    if (!mapLoaded || !map.current) return;
+    if (!mapLoaded || !map.current || routesInitializedRef.current) return;
 
     setMarkersReady(false);
 
-    // Clear existing markers
-    markersRef.current.forEach(marker => marker.remove());
-    markersRef.current = [];
-
-    // Remove existing route layers and sources
-    if (map.current.getLayer('all-routes')) {
-      map.current.removeLayer('all-routes');
-    }
-    if (map.current.getSource('all-routes')) {
-      map.current.removeSource('all-routes');
-    }
-
-    // Add hub marker (only once)
-    if (!document.querySelector('.hub-marker')) {
+    // Add hub marker (only once, cached permanently)
+    if (!hubMarkerRef.current) {
       const hubEl = document.createElement('div');
       hubEl.className = 'hub-marker';
       hubEl.style.backgroundColor = '#3b82f6';
@@ -208,23 +201,22 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       hubEl.style.border = '3px solid white';
       hubEl.style.boxShadow = '0 0 20px rgba(59, 130, 246, 0.8)';
 
-      const hubMarker = new mapboxgl.Marker(hubEl)
+      hubMarkerRef.current = new mapboxgl.Marker(hubEl)
         .setLngLat(copaNetwork.hub.coords)
         .setPopup(
           new mapboxgl.Popup({ offset: 25 })
             .setHTML(`<strong>${copaNetwork.hub.name}</strong><br/>${copaNetwork.hub.city}`)
         )
         .addTo(map.current);
-
-      markersRef.current.push(hubMarker);
     }
 
-    // Create all routes as a single GeoJSON FeatureCollection (MUCH faster!)
-    const routeFeatures = filteredDestinations.map((dest) => ({
+    // Create ALL routes once as a single GeoJSON (cached in Mapbox)
+    const allRouteFeatures = copaNetwork.destinations.map((dest) => ({
       type: 'Feature',
       properties: {
         code: dest.code,
-        highlighted: highlightRoute && highlightRoute.includes(dest.code)
+        region: dest.region,
+        highlighted: false
       },
       geometry: {
         type: 'LineString',
@@ -232,16 +224,14 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       }
     }));
 
-    // Add single source with all routes
     map.current.addSource('all-routes', {
       type: 'geojson',
       data: {
         type: 'FeatureCollection',
-        features: routeFeatures
+        features: allRouteFeatures
       }
     });
 
-    // Add single layer for all routes with data-driven styling
     map.current.addLayer({
       id: 'all-routes',
       type: 'line',
@@ -263,80 +253,92 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       }
     });
 
-    // Add destination markers in batches to avoid blocking
-    const addMarkersBatch = (startIdx) => {
-      const batchSize = 10;
-      const endIdx = Math.min(startIdx + batchSize, filteredDestinations.length);
+    // Create ALL destination markers once (cached in memory, but DON'T add to map yet)
+    copaNetwork.destinations.forEach((dest) => {
+      const destEl = document.createElement('div');
+      destEl.className = 'dest-marker';
+      destEl.style.backgroundColor = '#6b7280';
+      destEl.style.width = '12px';
+      destEl.style.height = '12px';
+      destEl.style.borderRadius = '50%';
+      destEl.style.border = '2px solid white';
+      destEl.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.5)';
 
-      for (let i = startIdx; i < endIdx; i++) {
-        const dest = filteredDestinations[i];
+      const marker = new mapboxgl.Marker(destEl)
+        .setLngLat(dest.coords)
+        .setPopup(
+          new mapboxgl.Popup({ offset: 15 })
+            .setHTML(`<strong>${dest.city}</strong><br/>${dest.code} - ${dest.country}`)
+        );
+        // DON'T call .addTo() here - let the filter effect handle visibility
 
-        const destEl = document.createElement('div');
-        destEl.className = 'dest-marker';
-        destEl.style.backgroundColor = highlightRoute && highlightRoute.includes(dest.code) ? '#10b981' : '#6b7280';
-        destEl.style.width = '12px';
-        destEl.style.height = '12px';
-        destEl.style.borderRadius = '50%';
-        destEl.style.border = '2px solid white';
-        destEl.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.5)';
+      // Cache marker with destination data
+      allMarkersRef.current.set(dest.code, { marker, dest, element: destEl });
+    });
 
-        const marker = new mapboxgl.Marker(destEl)
-          .setLngLat(dest.coords)
-          .setPopup(
-            new mapboxgl.Popup({ offset: 15 })
-              .setHTML(`<strong>${dest.city}</strong><br/>${dest.code} - ${dest.country}`)
-          )
-          .addTo(map.current);
+    routesInitializedRef.current = true;
+    setMarkersReady(true);
 
-        markersRef.current.push(marker);
-      }
+  }, [mapLoaded]);
 
-      if (endIdx < filteredDestinations.length) {
-        // Schedule next batch
-        requestAnimationFrame(() => addMarkersBatch(endIdx));
+  // Update marker visibility and routes based on filters (instant, no recreation!)
+  useEffect(() => {
+    if (!mapLoaded || !map.current || !routesInitializedRef.current) return;
+
+    const filteredCodes = new Set(filteredDestinations.map(d => d.code));
+
+    // Show/hide markers based on filter (instant!)
+    allMarkersRef.current.forEach(({ marker, dest, element }, code) => {
+      const isVisible = filteredCodes.has(code);
+
+      if (isVisible) {
+        marker.addTo(map.current);
+        // Update highlight color if needed
+        const isHighlighted = highlightRoute && highlightRoute.includes(code);
+        element.style.backgroundColor = isHighlighted ? '#10b981' : '#6b7280';
       } else {
-        setMarkersReady(true);
+        marker.remove();
       }
-    };
+    });
 
-    // Start adding markers
-    addMarkersBatch(0);
+    // Update routes layer with filter (uses Mapbox's built-in filtering - super fast!)
+    if (map.current.getSource('all-routes')) {
+      // Create filter expression
+      const codeFilter = ['in', ['get', 'code'], ['literal', Array.from(filteredCodes)]];
+      map.current.setFilter('all-routes', codeFilter);
+    }
 
     // Add weather overlay if enabled
-    if (weatherOverlay) {
-      if (!map.current.getSource('weather-overlay')) {
-        map.current.addSource('weather-overlay', {
-          type: 'geojson',
-          data: {
-            type: 'FeatureCollection',
-            features: [
-              {
-                type: 'Feature',
-                geometry: {
-                  type: 'Point',
-                  coordinates: copaNetwork.hub.coords
-                },
-                properties: {
-                  title: 'Thunderstorm Warning',
-                  description: '14:00-18:00'
-                }
-              }
-            ]
-          }
-        });
+    if (weatherOverlay && !map.current.getSource('weather-overlay')) {
+      map.current.addSource('weather-overlay', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: {
+              type: 'Point',
+              coordinates: copaNetwork.hub.coords
+            },
+            properties: {
+              title: 'Thunderstorm Warning',
+              description: '14:00-18:00'
+            }
+          }]
+        }
+      });
 
-        map.current.addLayer({
-          id: 'weather-warning',
-          type: 'circle',
-          source: 'weather-overlay',
-          paint: {
-            'circle-radius': 60,
-            'circle-color': '#ef4444',
-            'circle-opacity': 0.3,
-            'circle-blur': 0.8
-          }
-        });
-      }
+      map.current.addLayer({
+        id: 'weather-warning',
+        type: 'circle',
+        source: 'weather-overlay',
+        paint: {
+          'circle-radius': 60,
+          'circle-color': '#ef4444',
+          'circle-opacity': 0.3,
+          'circle-blur': 0.8
+        }
+      });
     }
   }, [mapLoaded, highlightRoute, weatherOverlay, selectedRegion, searchTerm, filteredDestinations]);
 
@@ -370,12 +372,12 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="absolute inset-0" />
 
-      {/* Loading Indicator */}
-      {mapLoaded && !markersReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-bg-primary/50 backdrop-blur-sm pointer-events-none">
+      {/* Loading Indicator - only on first load */}
+      {!markersReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-primary/30 backdrop-blur-sm pointer-events-none">
           <div className="bg-bg-card border border-white/10 rounded-lg p-4 flex items-center gap-3">
             <div className="w-5 h-5 border-2 border-accent-blue border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-white text-sm">Loading {filteredDestinations.length} destinations...</span>
+            <span className="text-white text-sm">Initializing network map...</span>
           </div>
         </div>
       )}
