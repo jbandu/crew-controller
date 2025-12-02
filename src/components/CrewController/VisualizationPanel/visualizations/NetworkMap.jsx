@@ -10,6 +10,33 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 // Debug logging
 console.log('[NetworkMap] Module loaded, token exists:', !!mapboxgl.accessToken);
 
+// Critical Mapbox CSS that must be applied (in case the CSS import fails)
+const mapboxCriticalCSS = `
+  .mapboxgl-map {
+    position: absolute !important;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .mapboxgl-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .mapboxgl-canvas-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+`;
+
 const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
@@ -18,6 +45,41 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   const [debugInfo, setDebugInfo] = useState({});
   const [containerReady, setContainerReady] = useState(false);
   const initAttempts = useRef(0);
+
+  // Inject critical CSS on mount
+  useEffect(() => {
+    const styleId = 'mapbox-critical-css';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = mapboxCriticalCSS;
+      document.head.appendChild(style);
+      console.log('[NetworkMap] Injected critical CSS');
+    }
+  }, []);
+
+  // Update debug info with canvas details
+  useEffect(() => {
+    if (!mapLoaded || !mapContainer.current) return;
+
+    const updateCanvasInfo = () => {
+      const canvas = mapContainer.current.querySelector('canvas');
+      const mapDiv = mapContainer.current.querySelector('.mapboxgl-map');
+      setDebugInfo(prev => ({
+        ...prev,
+        canvasExists: !!canvas,
+        canvasWidth: canvas?.width || 0,
+        canvasHeight: canvas?.height || 0,
+        canvasDisplay: canvas ? getComputedStyle(canvas).display : 'N/A',
+        mapDivExists: !!mapDiv,
+        mapDivDisplay: mapDiv ? getComputedStyle(mapDiv).display : 'N/A'
+      }));
+    };
+
+    // Update after a short delay to let Mapbox finish rendering
+    const timeoutId = setTimeout(updateCanvasInfo, 500);
+    return () => clearTimeout(timeoutId);
+  }, [mapLoaded]);
 
   // Use ResizeObserver to detect when container has dimensions
   useEffect(() => {
@@ -329,6 +391,11 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
           <div>Container Ready: {containerReady ? 'Yes' : 'No'}</div>
           <div>Map Loaded: {mapLoaded ? 'Yes' : 'No'}</div>
           <div>Init Attempts: {initAttempts.current}</div>
+          <div className="border-t border-yellow-600 pt-1 mt-1">Canvas Info:</div>
+          <div>Canvas: {debugInfo.canvasExists ? `Yes (${debugInfo.canvasWidth}x${debugInfo.canvasHeight})` : 'No'}</div>
+          <div>Canvas Display: {debugInfo.canvasDisplay || '?'}</div>
+          <div>MapDiv: {debugInfo.mapDivExists ? 'Yes' : 'No'}</div>
+          <div>MapDiv Display: {debugInfo.mapDivDisplay || '?'}</div>
           {error && <div className="text-red-400">Error: {error}</div>}
         </div>
       </div>
