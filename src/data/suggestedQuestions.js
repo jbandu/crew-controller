@@ -21,6 +21,13 @@ export const suggestedQuestions = [
     viz: 'FatigueHeatmap'
   },
   {
+    id: 'status',
+    icon: '👥',
+    short: 'Crew status',
+    full: 'Show me current crew utilization status',
+    viz: 'CrewUtilization'
+  },
+  {
     id: 'reserve',
     icon: '👤',
     short: 'Reserve coverage',
