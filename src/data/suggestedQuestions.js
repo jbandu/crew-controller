@@ -1,12 +1,5 @@
 export const suggestedQuestions = [
   {
-    id: 'network',
-    icon: '🌐',
-    short: 'Network map',
-    full: 'Show Copa Airlines route network',
-    viz: 'NetworkMap'
-  },
-  {
     id: 'weather',
     icon: '🌧️',
     short: 'Weather exposure',
@@ -54,5 +47,12 @@ export const suggestedQuestions = [
     short: 'Root cause',
     full: 'What caused Miami delays last week?',
     viz: 'RootCauseTree'
+  },
+  {
+    id: 'network',
+    icon: '🌐',
+    short: 'Network map',
+    full: 'Show Copa Airlines route network',
+    viz: 'NetworkMap'
   }
 ];
