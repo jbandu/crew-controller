@@ -7,29 +7,70 @@ import Badge from '../../shared/Badge';
 // Mapbox access token from environment variable
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
+// Debug logging
+console.log('[NetworkMap] Module loaded, token exists:', !!mapboxgl.accessToken);
+
 const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [error, setError] = useState(null);
+  const [debugInfo, setDebugInfo] = useState({});
 
   useEffect(() => {
-    if (map.current) return; // Initialize map only once
-    if (!mapContainer.current) return;
+    console.log('[NetworkMap] useEffect triggered');
+    console.log('[NetworkMap] map.current exists:', !!map.current);
+    console.log('[NetworkMap] mapContainer.current exists:', !!mapContainer.current);
+
+    if (map.current) {
+      console.log('[NetworkMap] Map already initialized, skipping');
+      return;
+    }
+    if (!mapContainer.current) {
+      console.log('[NetworkMap] No container ref, skipping');
+      return;
+    }
+
+    // Get container dimensions for debugging
+    const rect = mapContainer.current.getBoundingClientRect();
+    const containerDebug = {
+      width: rect.width,
+      height: rect.height,
+      top: rect.top,
+      left: rect.left,
+      tokenExists: !!mapboxgl.accessToken,
+      tokenLength: mapboxgl.accessToken ? mapboxgl.accessToken.length : 0,
+      webglSupported: mapboxgl.supported()
+    };
+    console.log('[NetworkMap] Container dimensions:', containerDebug);
+    setDebugInfo(containerDebug);
 
     // Check if WebGL is supported
     if (!mapboxgl.supported()) {
-      setError('WebGL is not supported in your browser. Please enable hardware acceleration or use a modern browser.');
+      const errMsg = 'WebGL is not supported in your browser. Please enable hardware acceleration or use a modern browser.';
+      console.error('[NetworkMap]', errMsg);
+      setError(errMsg);
       return;
     }
 
     // Check if Mapbox token is available
     if (!mapboxgl.accessToken) {
-      setError('Mapbox access token is not configured. Please check your environment variables.');
+      const errMsg = 'Mapbox access token is not configured. Please check your environment variables.';
+      console.error('[NetworkMap]', errMsg);
+      setError(errMsg);
+      return;
+    }
+
+    // Check if container has dimensions
+    if (rect.width === 0 || rect.height === 0) {
+      const errMsg = `Map container has no dimensions (${rect.width}x${rect.height}). CSS height chain may be broken.`;
+      console.error('[NetworkMap]', errMsg);
+      setError(errMsg);
       return;
     }
 
     try {
+      console.log('[NetworkMap] Initializing Mapbox GL map...');
       // Initialize map
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
@@ -38,13 +79,19 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
         zoom: 3.5,
         projection: 'globe'
       });
+      console.log('[NetworkMap] Map object created successfully');
     } catch (err) {
-      console.error('Failed to initialize Mapbox GL:', err);
-      setError('Failed to initialize the map. Please try refreshing the page.');
+      console.error('[NetworkMap] Failed to initialize Mapbox GL:', err);
+      setError(`Failed to initialize the map: ${err.message}`);
       return;
     }
 
+    map.current.on('error', (e) => {
+      console.error('[NetworkMap] Map error event:', e);
+    });
+
     map.current.on('style.load', () => {
+      console.log('[NetworkMap] Style loaded successfully');
       // Add fog and atmosphere
       map.current.setFog({
         color: 'rgb(10, 15, 26)',
@@ -57,10 +104,15 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       setMapLoaded(true);
     });
 
+    map.current.on('load', () => {
+      console.log('[NetworkMap] Map fully loaded');
+    });
+
     // Add navigation controls
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
     return () => {
+      console.log('[NetworkMap] Cleanup - removing map');
       if (map.current) {
         map.current.remove();
       }
@@ -187,6 +239,15 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
             <div>
               <h3 className="text-white font-semibold mb-2">Map Unavailable</h3>
               <p className="text-text-secondary text-sm mb-4">{error}</p>
+              {/* Debug info panel */}
+              <div className="bg-bg-elevated rounded p-3 mb-4 text-xs font-mono">
+                <div className="text-text-muted mb-1">Debug Info:</div>
+                <div className="text-text-secondary">
+                  Container: {debugInfo.width}x{debugInfo.height}<br />
+                  Token: {debugInfo.tokenExists ? `Yes (${debugInfo.tokenLength} chars)` : 'No'}<br />
+                  WebGL: {debugInfo.webglSupported ? 'Supported' : 'Not Supported'}
+                </div>
+              </div>
               <div className="text-text-muted text-xs">
                 <p className="mb-2">Possible solutions:</p>
                 <ul className="list-disc ml-4 space-y-1">
