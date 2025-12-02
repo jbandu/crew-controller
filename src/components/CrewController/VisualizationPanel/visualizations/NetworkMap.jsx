@@ -16,12 +16,58 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [debugInfo, setDebugInfo] = useState({});
+  const [containerReady, setContainerReady] = useState(false);
+  const initAttempts = useRef(0);
 
+  // Use ResizeObserver to detect when container has dimensions
   useEffect(() => {
-    console.log('[NetworkMap] useEffect triggered');
-    console.log('[NetworkMap] map.current exists:', !!map.current);
-    console.log('[NetworkMap] mapContainer.current exists:', !!mapContainer.current);
+    if (!mapContainer.current) return;
 
+    const checkDimensions = () => {
+      const rect = mapContainer.current?.getBoundingClientRect();
+      if (rect && rect.width > 0 && rect.height > 0) {
+        console.log('[NetworkMap] Container ready with dimensions:', rect.width, 'x', rect.height);
+        setContainerReady(true);
+        return true;
+      }
+      return false;
+    };
+
+    // Check immediately
+    if (checkDimensions()) return;
+
+    // Use ResizeObserver to watch for dimension changes
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          console.log('[NetworkMap] ResizeObserver detected dimensions:', entry.contentRect.width, 'x', entry.contentRect.height);
+          setContainerReady(true);
+          observer.disconnect();
+        }
+      }
+    });
+
+    observer.observe(mapContainer.current);
+
+    // Also set up a fallback timeout check
+    const timeoutId = setTimeout(() => {
+      if (!containerReady) {
+        console.log('[NetworkMap] Timeout check for dimensions');
+        checkDimensions();
+      }
+    }, 500);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeoutId);
+    };
+  }, [containerReady]);
+
+  // Initialize map when container is ready
+  useEffect(() => {
+    console.log('[NetworkMap] Init useEffect - containerReady:', containerReady, 'map exists:', !!map.current);
+
+    if (!containerReady) return;
     if (map.current) {
       console.log('[NetworkMap] Map already initialized, skipping');
       return;
@@ -31,16 +77,20 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       return;
     }
 
+    initAttempts.current += 1;
+    console.log('[NetworkMap] Initialization attempt #', initAttempts.current);
+
     // Get container dimensions for debugging
     const rect = mapContainer.current.getBoundingClientRect();
     const containerDebug = {
-      width: rect.width,
-      height: rect.height,
-      top: rect.top,
-      left: rect.left,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      top: Math.round(rect.top),
+      left: Math.round(rect.left),
       tokenExists: !!mapboxgl.accessToken,
       tokenLength: mapboxgl.accessToken ? mapboxgl.accessToken.length : 0,
-      webglSupported: mapboxgl.supported()
+      webglSupported: mapboxgl.supported(),
+      attempt: initAttempts.current
     };
     console.log('[NetworkMap] Container dimensions:', containerDebug);
     setDebugInfo(containerDebug);
@@ -115,9 +165,10 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       console.log('[NetworkMap] Cleanup - removing map');
       if (map.current) {
         map.current.remove();
+        map.current = null;
       }
     };
-  }, []);
+  }, [containerReady]);
 
   useEffect(() => {
     if (!mapLoaded || !map.current) return;
