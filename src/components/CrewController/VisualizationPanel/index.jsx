@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import VisualizationRouter from './VisualizationRouter';
 
-const VisualizationPanel = ({ current, data, isAnimating }) => {
+const VisualizationPanel = ({ current, data, isAnimating, onAction }) => {
   // PTY coordinates: 9.0714, -79.3835
   const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -35,7 +35,7 @@ const VisualizationPanel = ({ current, data, isAnimating }) => {
           transition={{ duration: 0.3 }}
           className="flex-1 h-full min-h-0 overflow-y-auto relative z-10"
         >
-          <VisualizationRouter type={current} data={data} />
+          <VisualizationRouter type={current} data={data} onAction={onAction} />
         </motion.div>
       </AnimatePresence>
     </div>
