@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { demoMessages } from '../data/demoScenarios';
+import { sounds } from '../utils/sounds';
 
 const getResponseForInput = (content, demoStep) => {
   const lowerContent = content.toLowerCase();
@@ -45,20 +46,24 @@ export const useChat = () => {
   }, [addMessage, demoStep]);
 
   const triggerGreeting = useCallback(() => {
+    sounds.notification();
     addMessage(demoMessages.greeting);
     setDemoStep('greeting');
   }, [addMessage]);
 
   const triggerDisruption = useCallback(() => {
+    sounds.alert();
     addMessage(demoMessages.disruptionAlert);
     setDemoStep('disruption');
   }, [addMessage]);
 
   const selectOption = useCallback((option) => {
+    sounds.message();
     addMessage({ type: 'user', content: `[Selected: ${option.label}]` });
     setIsTyping(true);
 
     setTimeout(() => {
+      sounds.success();
       addMessage(demoMessages.resolution);
       setIsTyping(false);
       setDemoStep('resolved');
@@ -66,6 +71,7 @@ export const useChat = () => {
   }, [addMessage]);
 
   const triggerShiftEnd = useCallback(() => {
+    sounds.notification();
     addMessage(demoMessages.shiftEnd);
     setDemoStep('shiftEnd');
   }, [addMessage]);
