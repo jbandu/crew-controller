@@ -33,7 +33,7 @@ const VisualizationPanel = ({ current, data, isAnimating }) => {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
           transition={{ duration: 0.3 }}
-          className="flex-1 overflow-y-auto relative z-10"
+          className="flex-1 h-full min-h-0 overflow-y-auto relative z-10"
         >
           <VisualizationRouter type={current} data={data} />
         </motion.div>

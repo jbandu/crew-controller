@@ -54,7 +54,7 @@ const CrewController = () => {
         </div>
 
         {/* Visualization Panel - 60% */}
-        <div className="flex-1">
+        <div className="flex-1 h-full">
           <VisualizationPanel
             current={current}
             data={data}
