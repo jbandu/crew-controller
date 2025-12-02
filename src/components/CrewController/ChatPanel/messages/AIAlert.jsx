@@ -22,17 +22,18 @@ const AIAlert = ({ title, severity = 'critical', content, timestamp }) => {
             </Badge>
             <h3 className="text-white font-semibold">{title}</h3>
           </div>
-          <ReactMarkdown
-            className="text-text-primary prose prose-invert prose-sm max-w-none"
-            components={{
-              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-              ul: ({ children }) => <ul className="list-disc ml-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
-              li: ({ children }) => <li className="text-text-secondary">{children}</li>,
-              strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>
-            }}
-          >
-            {content}
-          </ReactMarkdown>
+          <div className="text-text-primary prose prose-invert prose-sm max-w-none">
+            <ReactMarkdown
+              components={{
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }) => <ul className="list-disc ml-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
+                li: ({ children }) => <li className="text-text-secondary">{children}</li>,
+                strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>
+              }}
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
         </div>
         {timestamp && (
           <span className="text-xs text-text-muted mt-1 block">

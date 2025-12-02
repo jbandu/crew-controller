@@ -1,6 +1,7 @@
 import { copaNetwork } from '../data/copaData';
 
-const OPENWEATHER_API_KEY = '02b6b544113d2f4eb5bc0e2ee8b5a4c4';
+// Load API key from environment variable
+const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY;
 const OPENWEATHER_BASE_URL = 'https://api.openweathermap.org/data/2.5';
 
 // Weather condition severity levels

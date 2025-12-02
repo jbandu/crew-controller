@@ -7,18 +7,19 @@ const AIConfirmation = ({ content, timestamp, actions }) => {
       <Avatar name="AI" size="md" type="ai" />
       <div className="flex-1">
         <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3">
-          <ReactMarkdown
-            className="text-text-primary prose prose-invert prose-sm max-w-none"
-            components={{
-              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-              ul: ({ children }) => <ul className="list-disc ml-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
-              li: ({ children }) => <li className="text-text-secondary">{children}</li>,
-              strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
-              hr: () => <hr className="my-3 border-white/10" />
-            }}
-          >
-            {content}
-          </ReactMarkdown>
+          <div className="text-text-primary prose prose-invert prose-sm max-w-none">
+            <ReactMarkdown
+              components={{
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }) => <ul className="list-disc ml-4 mb-2 last:mb-0 space-y-1">{children}</ul>,
+                li: ({ children }) => <li className="text-text-secondary">{children}</li>,
+                strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
+                hr: () => <hr className="my-3 border-white/10" />
+              }}
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
           {actions && actions.length > 0 && (
             <div className="flex gap-2 mt-4">
               {actions.map((action, idx) => (

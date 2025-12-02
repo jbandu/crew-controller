@@ -1,9 +1,42 @@
 import { useState, useCallback } from 'react';
 import { demoMessages } from '../data/demoScenarios';
 import { sounds } from '../utils/sounds';
+import {
+  shiftStartScenarios,
+  shiftEndScenarios,
+  getRandomScenario,
+  getRandomDisruption
+} from '../data/rotatingScenarios';
+import { getAIAnalysis } from '../services/anthropicService';
 
 const getResponseForInput = (content, demoStep) => {
   const lowerContent = content.toLowerCase();
+
+  // Handle network map question
+  if (lowerContent.includes('network') || lowerContent.includes('route')) {
+    return {
+      type: 'ai-analysis',
+      content: `**Copa Airlines Route Network**
+
+Displaying 3D interactive map of Copa's hub-and-spoke network from PTY.
+
+**Network Overview:**
+• Hub: Panama City (PTY) - Tocumen International
+• Active Routes: 15 destinations
+• Fleet: 18 aircraft (737-800, 737 MAX 9)
+• Daily Operations: 82+ flights
+
+**Key Destinations:**
+• North America: MIA, LAX, JFK, MEX
+• South America: BOG, MDE, LIM, GRU, EZE
+• Caribbean: CUN, SJU, HAV
+• Central America: SJO, SAL, GUA
+
+Interactive features: Click markers for details, rotate globe to explore routes.`,
+      visualization: 'NetworkMap',
+      data: { weatherOverlay: false }
+    };
+  }
 
   // Handle live weather question
   if (lowerContent.includes('real-time weather') || lowerContent.includes('live weather')) {
@@ -45,11 +78,44 @@ export const useChat = () => {
     addMessage({ type: 'user', content });
     setIsTyping(true);
 
-    // Simulate AI thinking
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+    const lowerContent = content.toLowerCase();
+    let response;
 
-    // Get pre-scripted response based on demo flow
-    const response = getResponseForInput(content, demoStep);
+    // Check if this matches a pre-scripted response pattern
+    const hasPreScriptedResponse =
+      lowerContent.includes('network') ||
+      lowerContent.includes('route') ||
+      lowerContent.includes('real-time weather') ||
+      lowerContent.includes('live weather') ||
+      lowerContent.includes('weather') ||
+      lowerContent.includes('exposure');
+
+    // Try to use live AI for custom questions if API key is available
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY ||
+                   import.meta.env.ANTHROPIC_API_KEY ||
+                   localStorage.getItem('anthropic_api_key');
+
+    if (!hasPreScriptedResponse && apiKey) {
+      try {
+        // Use live Anthropic AI
+        const aiResponse = await getAIAnalysis(content, apiKey);
+        response = {
+          type: 'ai-analysis',
+          content: `**🤖 Live AI Response**\n\n${aiResponse.content}\n\n---\n*Powered by Claude ${aiResponse.model}*`,
+          visualization: 'OperationsOverview'
+        };
+      } catch (error) {
+        console.error('Anthropic API error:', error);
+        // Fall back to demo response
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        response = getResponseForInput(content, demoStep);
+      }
+    } else {
+      // Use pre-scripted demo response
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+      response = getResponseForInput(content, demoStep);
+    }
+
     addMessage(response);
     setIsTyping(false);
 
@@ -58,13 +124,17 @@ export const useChat = () => {
 
   const triggerGreeting = useCallback(() => {
     sounds.notification();
-    addMessage(demoMessages.greeting);
+    // Get a random greeting scenario
+    const greeting = getRandomScenario(shiftStartScenarios);
+    addMessage(greeting);
     setDemoStep('greeting');
   }, [addMessage]);
 
   const triggerDisruption = useCallback(() => {
     sounds.alert();
-    addMessage(demoMessages.disruptionAlert);
+    // Get a random disruption scenario
+    const disruption = getRandomDisruption();
+    addMessage(disruption);
     setDemoStep('disruption');
   }, [addMessage]);
 
@@ -83,9 +153,16 @@ export const useChat = () => {
 
   const triggerShiftEnd = useCallback(() => {
     sounds.notification();
-    addMessage(demoMessages.shiftEnd);
+    // Get a random shift end scenario
+    const shiftEnd = getRandomScenario(shiftEndScenarios);
+    addMessage(shiftEnd);
     setDemoStep('shiftEnd');
   }, [addMessage]);
+
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setDemoStep('init');
+  }, []);
 
   return {
     messages,
@@ -95,6 +172,7 @@ export const useChat = () => {
     triggerDisruption,
     selectOption,
     triggerShiftEnd,
+    clearMessages,
     demoStep
   };
 };

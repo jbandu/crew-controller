@@ -1,5 +1,12 @@
 export const suggestedQuestions = [
   {
+    id: 'network',
+    icon: '🌐',
+    short: 'Network map',
+    full: 'Show Copa Airlines route network',
+    viz: 'NetworkMap'
+  },
+  {
     id: 'weather',
     icon: '🌧️',
     short: 'Weather exposure',

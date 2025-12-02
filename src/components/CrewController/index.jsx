@@ -15,6 +15,7 @@ const CrewController = () => {
     triggerDisruption,
     selectOption,
     triggerShiftEnd,
+    clearMessages,
     demoStep
   } = useChat();
 
@@ -42,6 +43,7 @@ const CrewController = () => {
             isTyping={isTyping}
             onSendMessage={sendMessage}
             onSelectOption={selectOption}
+            onClear={clearMessages}
           />
         </div>
 

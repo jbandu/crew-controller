@@ -49,7 +49,7 @@ const MessageRenderer = ({ message, onSelectOption }) => {
   }
 };
 
-const ChatPanel = ({ messages, isTyping, onSendMessage, onSelectOption }) => {
+const ChatPanel = ({ messages, isTyping, onSendMessage, onSelectOption, onClear }) => {
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -97,7 +97,7 @@ const ChatPanel = ({ messages, isTyping, onSendMessage, onSelectOption }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      <SuggestedQuestions onSelect={handleQuestionSelect} />
+      <SuggestedQuestions onSelect={handleQuestionSelect} onClear={onClear} />
       <InputBar onSend={onSendMessage} disabled={isTyping} />
     </div>
   );

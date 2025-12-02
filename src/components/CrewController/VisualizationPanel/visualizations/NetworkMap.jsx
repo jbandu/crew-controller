@@ -4,25 +4,45 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { copaNetwork } from '../../../../data/copaData';
 import Badge from '../../shared/Badge';
 
-// Mapbox access token
-mapboxgl.accessToken = 'pk.eyJ1IjoiamJhbmR1IiwiYSI6ImNtYWJzdzkxbzJmYXUybXE5cjI0NGRqMWgifQ.TQgz7S7aiqjG_-4-MEuzeQ';
+// Mapbox access token from environment variable
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (map.current) return; // Initialize map only once
+    if (!mapContainer.current) return;
 
-    // Initialize map
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
-      center: [-79.3835, 9.0714], // PTY hub
-      zoom: 3.5,
-      projection: 'globe'
-    });
+    // Check if WebGL is supported
+    if (!mapboxgl.supported()) {
+      setError('WebGL is not supported in your browser. Please enable hardware acceleration or use a modern browser.');
+      return;
+    }
+
+    // Check if Mapbox token is available
+    if (!mapboxgl.accessToken) {
+      setError('Mapbox access token is not configured. Please check your environment variables.');
+      return;
+    }
+
+    try {
+      // Initialize map
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [-79.3835, 9.0714], // PTY hub
+        zoom: 3.5,
+        projection: 'globe'
+      });
+    } catch (err) {
+      console.error('Failed to initialize Mapbox GL:', err);
+      setError('Failed to initialize the map. Please try refreshing the page.');
+      return;
+    }
 
     map.current.on('style.load', () => {
       // Add fog and atmosphere
@@ -156,6 +176,32 @@ const NetworkMap = ({ highlightRoute, weatherOverlay = false }) => {
       }
     }
   }, [mapLoaded, highlightRoute, weatherOverlay]);
+
+  // Show error message if map failed to initialize
+  if (error) {
+    return (
+      <div className="relative w-full h-full flex items-center justify-center bg-bg-primary">
+        <div className="max-w-md p-6 bg-bg-card border border-red-500/30 rounded-lg">
+          <div className="flex items-start gap-3">
+            <div className="text-red-500 text-2xl">⚠️</div>
+            <div>
+              <h3 className="text-white font-semibold mb-2">Map Unavailable</h3>
+              <p className="text-text-secondary text-sm mb-4">{error}</p>
+              <div className="text-text-muted text-xs">
+                <p className="mb-2">Possible solutions:</p>
+                <ul className="list-disc ml-4 space-y-1">
+                  <li>Enable hardware acceleration in your browser settings</li>
+                  <li>Update your graphics drivers</li>
+                  <li>Try using a different browser (Chrome, Firefox, Edge)</li>
+                  <li>Check if WebGL is enabled at: <a href="https://get.webgl.org/" target="_blank" rel="noopener noreferrer" className="text-accent-blue hover:underline">get.webgl.org</a></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-full">
